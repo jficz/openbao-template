@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul-template/renderer"
-	"github.com/hashicorp/vault/api"
+	"github.com/openbao/openbao/api"
 )
 
 func init() {
