@@ -4,8 +4,6 @@
 package dependency
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -13,11 +11,7 @@ import (
 	"os/exec"
 	"reflect"
 	"testing"
-	"time"
 
-	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/consul/sdk/testutil"
-	nomadapi "github.com/hashicorp/nomad/api"
 	"github.com/openbao/consul-template/test"
 	vapi "github.com/openbao/openbao/api"
 )
@@ -28,63 +22,22 @@ const (
 )
 
 var (
-	testConsul    *testutil.TestServer
-	testVault     *vaultServer
-	testNomad     *nomadServer
-	testClients   *ClientSet
-	tenancyHelper *test.TenancyHelper
+	testVault   *vaultServer
+	testClients *ClientSet
 )
 
 func TestMain(m *testing.M) {
 	log.SetOutput(io.Discard)
-	nomadFuture := runTestNomad()
 	runTestVault()
 	tb := &test.TestingTB{}
-	runTestConsul(tb)
 	clients := NewClientSet()
-
-	defer func() {
-		// Attempt to recover from a panic and stop the server. If we don't
-		// stop it, the panic will cause the server to remain running in
-		// the background. Here we catch the panic and the re-raise it.
-		// This doesn't do anything if we get panics in individual test cases
-		if r := recover(); r != nil {
-			testConsul.Stop()
-			testVault.Stop()
-			testNomad.Stop()
-			panic(r)
-		}
-	}()
-
-	if err := clients.CreateConsulClient(&CreateConsulClientInput{
-		Address: testConsul.HTTPAddr,
-	}); err != nil {
-		testConsul.Stop()
-		Fatalf("failed to create consul client: %v\n", err)
-	}
-
-	if t, err := test.NewTenancyHelper(clients.Consul()); err != nil {
-		stopTestClients()
-		Fatalf("failed to create tenancy helper: %v\n", err)
-	} else {
-		tenancyHelper = t
-	}
-
 	if err := clients.CreateVaultClient(&CreateVaultClientInput{
 		Address: vaultAddr,
 		Token:   vaultToken,
 	}); err != nil {
-		testConsul.Stop()
 		testVault.Stop()
 		Fatalf("failed to create vault client: %v\n", err)
 	}
-	if err := clients.CreateNomadClient(&CreateNomadClientInput{
-		Address: "http://127.0.0.1:4646",
-	}); err != nil {
-		stopTestClients()
-		Fatalf("failed to create nomad client: %v\n", err)
-	}
-
 	testClients = clients
 
 	if err := testClients.createConsulPartitions(); err != nil {
@@ -99,328 +52,26 @@ func TestMain(m *testing.M) {
 
 	setupVaultPKI(clients)
 
-	if err := testClients.createConsulTestResources(); err != nil {
-		stopTestClients()
-		Fatalf("failed to create consul test resources: %v\n", err)
-	}
+	exitCh := make(chan int, 1)
+	func() {
+		defer func() {
+			// Attempt to recover from a panic and stop the server. If we don't
+			// stop it, the panic will cause the server to remain running in
+			// the background. Here we catch the panic and the re-raise it.
+			if r := recover(); r != nil {
+				testVault.Stop()
+				panic(r)
+			}
+		}()
 
-	// Wait for Nomad initialization to finish
-	if err := <-nomadFuture; err != nil {
-		stopTestClients()
-		Fatalf("failed to start Nomad: %v\n", err)
-	}
+		exitCh <- m.Run()
+	}()
 
-	exit := m.Run()
+	exit := <-exitCh
 
 	tb.DoCleanup()
-	stopTestClients()
-	os.Exit(exit)
-}
-
-func stopTestClients() {
-	testConsul.Stop()
 	testVault.Stop()
-	testNomad.Stop()
-}
-
-func (c *ClientSet) createConsulTestResources() error {
-	catalog := testClients.Consul().Catalog()
-	for _, tenancy := range tenancyHelper.TestTenancies() {
-		partition := ""
-		namespace := ""
-		if tenancyHelper.IsConsulEnterprise() {
-			partition = tenancy.Partition
-			namespace = tenancy.Namespace
-		}
-		node := "node" + tenancy.Partition
-		// service with meta data
-		serviceMetaService := &api.AgentService{
-			ID:      fmt.Sprintf("service-meta-%s-%s", tenancy.Partition, tenancy.Namespace),
-			Service: fmt.Sprintf("service-meta-%s-%s", tenancy.Partition, tenancy.Namespace),
-			Tags:    []string{"tag1"},
-			Meta: map[string]string{
-				"meta1": "value1",
-			},
-			Partition: partition,
-			Namespace: namespace,
-		}
-		if _, err := catalog.Register(&api.CatalogRegistration{
-			Service:   serviceMetaService,
-			Partition: partition,
-			Node:      node,
-			Address:   "127.0.0.1",
-		}, nil); err != nil {
-			return err
-		}
-		// service with serviceTaggedAddresses
-		serviceTaggedAddressesService := &api.AgentService{
-			ID:      fmt.Sprintf("service-taggedAddresses-%s-%s", tenancy.Partition, tenancy.Namespace),
-			Service: fmt.Sprintf("service-taggedAddresses-%s-%s", tenancy.Partition, tenancy.Namespace),
-			TaggedAddresses: map[string]api.ServiceAddress{
-				"lan": {
-					Address: "192.0.2.1",
-					Port:    80,
-				},
-				"wan": {
-					Address: "192.0.2.2",
-					Port:    443,
-				},
-			},
-			Partition: partition,
-			Namespace: namespace,
-		}
-		if _, err := catalog.Register(&api.CatalogRegistration{
-			Service:   serviceTaggedAddressesService,
-			Partition: partition,
-			Node:      node,
-			Address:   "127.0.0.1",
-		}, nil); err != nil {
-			return err
-		}
-
-		// connect enabled service
-		testService := &api.AgentService{
-			ID:        fmt.Sprintf("conn-enabled-service-%s-%s", tenancy.Partition, tenancy.Namespace),
-			Service:   fmt.Sprintf("conn-enabled-service-%s-%s", tenancy.Partition, tenancy.Namespace),
-			Port:      12345,
-			Connect:   &api.AgentServiceConnect{},
-			Partition: partition,
-			Namespace: namespace,
-		}
-		// this is based on what `consul connect proxy` command does at
-		// consul/command/connect/proxy/register.go (register method)
-		testConnect := &api.AgentService{
-			Kind:    api.ServiceKindConnectProxy,
-			ID:      fmt.Sprintf("conn-enabled-service-proxy-%s-%s", tenancy.Partition, tenancy.Namespace),
-			Service: fmt.Sprintf("conn-enabled-service-proxy-%s-%s", tenancy.Partition, tenancy.Namespace),
-			Port:    21999,
-			Proxy: &api.AgentServiceConnectProxyConfig{
-				DestinationServiceName: fmt.Sprintf("conn-enabled-service-%s-%s", tenancy.Partition, tenancy.Namespace),
-			},
-			Partition: partition,
-			Namespace: namespace,
-		}
-
-		if _, err := catalog.Register(&api.CatalogRegistration{
-			Service:   testService,
-			Partition: partition,
-			Node:      node,
-			Address:   "127.0.0.1",
-		}, nil); err != nil {
-			return err
-		}
-
-		if _, err := catalog.Register(&api.CatalogRegistration{
-			Service:   testConnect,
-			Partition: partition,
-			Node:      node,
-			Address:   "127.0.0.1",
-		}, nil); err != nil {
-			return err
-		}
-
-		if err := testClients.createConsulPeerings(tenancy); err != nil {
-			return err
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-
-	return nil
-}
-
-func (c *ClientSet) createConsulSamenessGroups(name, partition, failoverPartition string) error {
-	members := append([]api.SamenessGroupMember{}, api.SamenessGroupMember{
-		Partition: partition,
-	}, api.SamenessGroupMember{
-		Partition: failoverPartition,
-	})
-	sg := &api.SamenessGroupConfigEntry{
-		Kind:               api.SamenessGroup,
-		Name:               name,
-		Partition:          partition,
-		DefaultForFailover: true,
-		Members:            members,
-	}
-	_, _, err := c.consul.client.ConfigEntries().Set(sg, &api.WriteOptions{})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *ClientSet) createConsulPeerings(tenancy *test.Tenancy) error {
-	generateReq := api.PeeringGenerateTokenRequest{PeerName: "foo", Partition: tenancy.Partition}
-	_, _, err := c.consul.client.Peerings().GenerateToken(context.Background(), generateReq, &api.WriteOptions{})
-	if err != nil {
-		return err
-	}
-
-	generateReq = api.PeeringGenerateTokenRequest{PeerName: "bar", Partition: tenancy.Partition}
-	_, _, err = c.consul.client.Peerings().GenerateToken(context.Background(), generateReq, &api.WriteOptions{})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func runTestConsul(tb testutil.TestingTB) {
-	consul, err := testutil.NewTestServerConfigT(tb,
-		func(c *testutil.TestServerConfig) {
-			c.LogLevel = "warn"
-			c.Stdout = io.Discard
-			c.Stderr = io.Discard
-		})
-	if err != nil {
-		Fatalf("failed to start consul server: %v", err)
-	}
-	testConsul = consul
-}
-
-// runTestNomad starts a Nomad agent and returns a chan which will block until
-// initialization is complete or fails. Stop() is safe to call after the chan
-// is returned.
-func runTestNomad() <-chan error {
-	path, err := exec.LookPath("nomad")
-	if err != nil || path == "" {
-		Fatalf("nomad not found on $PATH")
-	}
-	cmd := exec.Command(path, "agent", "-dev",
-		"-node=test",
-		"-vault-enabled=false",
-		"-consul-auto-advertise=false",
-		"-consul-client-auto-join=false", "-consul-server-auto-join=false",
-		"-network-speed=100",
-		"-log-level=error", // We're just discarding it anyway
-	)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-
-	if err := cmd.Start(); err != nil {
-		Fatalf("nomad failed to start: %v", err)
-	}
-	testNomad = &nomadServer{
-		cmd: cmd,
-	}
-
-	errCh := make(chan error, 1)
-	go initTestNomad(errCh)
-
-	return errCh
-}
-
-func initTestNomad(errCh chan<- error) {
-	defer close(errCh)
-
-	// Load a job with a Nomad service. Use a JSON formatted job to avoid
-	// an additional dependency upon Nomad's jobspec package or having to
-	// wait for the agent to be up before the job can be parsed.
-	fd, err := os.Open("../test/testdata/nomad.json")
-	if err != nil {
-		errCh <- fmt.Errorf("error opening test job: %w", err)
-		return
-	}
-	var job nomadapi.Job
-	if err := json.NewDecoder(fd).Decode(&job); err != nil {
-		errCh <- fmt.Errorf("error parsing test job: %w", err)
-		return
-	}
-
-	config := nomadapi.DefaultConfig()
-	client, err := nomadapi.NewClient(config)
-	if err != nil {
-		errCh <- fmt.Errorf("failed to create nomad client: %w", err)
-		return
-	}
-
-	// Wait for API to become available
-	for e := time.Now().Add(30 * time.Second); time.Now().Before(e); {
-		var self *nomadapi.AgentSelf
-		self, err = client.Agent().Self()
-		if err != nil {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		fmt.Printf("Nomad v%s running on %s\n", self.Member.Tags["build"], config.Address)
-		break
-	}
-	if err != nil {
-		errCh <- fmt.Errorf("failed to contact nomad agent: %w", err)
-		return
-	}
-
-	// Register a job
-	if _, _, err := client.Jobs().Register(&job, nil); err != nil {
-		errCh <- fmt.Errorf("failed registering nomad job: %w", err)
-		return
-	}
-
-	// Wait for it start
-	var allocs []*nomadapi.AllocationListStub
-	for e := time.Now().Add(30 * time.Second); time.Now().Before(e); {
-		allocs, _, err = client.Jobs().Allocations(*job.ID, true, nil)
-		if err != nil {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		if n := len(allocs); n > 1 {
-			errCh <- fmt.Errorf("expected 1 nomad alloc but found: %d\n%s\n%s",
-				n,
-				compileTaskStates(allocs[0]),
-				compileTaskStates(allocs[1]),
-			)
-			return
-		} else if n == 0 {
-			err = fmt.Errorf("expected 1 nomad alloc but found none")
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-
-		if s := allocs[0].ClientStatus; s != "running" {
-			err = fmt.Errorf("expected nomad alloc running but found %q\n%s",
-				s, compileTaskStates(allocs[0]),
-			)
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		break
-	}
-	if err != nil {
-		errCh <- fmt.Errorf("failed to start nomad job: %w", err)
-		return
-	}
-	fmt.Printf("Nomad started: %s\n", compileTaskStates(allocs[0]))
-}
-
-func compileTaskStates(a *nomadapi.AllocationListStub) string {
-	out := ""
-	for name, state := range a.TaskStates {
-		out += fmt.Sprintf("%s: [", name)
-		for i, e := range state.Events {
-			out += e.Type
-			if i != len(state.Events)-1 {
-				out += ", "
-			}
-		}
-		out += "] "
-	}
-	return out
-}
-
-type nomadServer struct {
-	cmd *exec.Cmd
-}
-
-func (n *nomadServer) Stop() error {
-	if n == nil || n.cmd == nil || n.cmd.Process == nil {
-		fmt.Println("No Nomad process to stop")
-		return nil
-	}
-
-	fmt.Println("Signalling Nomad")
-	n.cmd.Process.Signal(os.Interrupt)
-	return n.cmd.Wait()
+	os.Exit(exit)
 }
 
 type vaultServer struct {
@@ -429,20 +80,21 @@ type vaultServer struct {
 }
 
 func runTestVault() {
-	path, err := exec.LookPath("vault")
+	// TODO: convert to vault.NewTestCluster(...) instead.
+	path, err := exec.LookPath("bao")
 	if err != nil || path == "" {
-		Fatalf("vault not found on $PATH")
+		Fatalf("bao not found on $PATH")
 	}
 	args := []string{
 		"server", "-dev", "-dev-root-token-id", vaultToken,
 		"-dev-no-store-token",
 	}
-	cmd := exec.Command("vault", args...)
+	cmd := exec.Command("bao", args...)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 
 	if err := cmd.Start(); err != nil {
-		Fatalf("vault failed to start: %v", err)
+		Fatalf("bao failed to start: %v", err)
 	}
 	testVault = &vaultServer{
 		cmd: cmd,
@@ -493,7 +145,6 @@ func (v *vaultServer) deleteSecret(path string) error {
 
 func TestCanShare(t *testing.T) {
 	deps := []Dependency{
-		&CatalogNodeQuery{},
 		&FileQuery{},
 		&VaultListQuery{},
 		&VaultReadQuery{},
@@ -521,69 +172,4 @@ func TestDeepCopyAndSortTags(t *testing.T) {
 func Fatalf(format string, args ...interface{}) {
 	fmt.Printf(format, args...)
 	os.Exit(1)
-}
-
-func (v *nomadServer) CreateVariable(path string, data map[string]string, opts *nomadapi.WriteOptions) error {
-	nVar := nomadapi.NewVariable(path)
-	for k, v := range data {
-		nVar.Items[k] = v
-	}
-	_, _, err := testClients.Nomad().Variables().Update(nVar, opts)
-	if err != nil {
-		fmt.Println(err)
-	}
-	return err
-}
-
-func (v *nomadServer) CreateNamespace(name string, opts *nomadapi.WriteOptions) error {
-	ns := nomadapi.Namespace{Name: name}
-	_, err := testClients.Nomad().Namespaces().Register(&ns, opts)
-	if err != nil {
-		fmt.Println(err)
-	}
-	return err
-}
-
-func (v *nomadServer) DeleteVariable(path string, opts *nomadapi.WriteOptions) error {
-	_, err := testClients.Nomad().Variables().Delete(path, opts)
-	if err != nil {
-		fmt.Println(err)
-	}
-	return err
-}
-
-func (c *ClientSet) createConsulPartitions() error {
-	for p := range tenancyHelper.GetUniquePartitions() {
-		if p.Name != "" && p.Name != "default" {
-			err := c.createConsulPartition(p.Name)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func (c *ClientSet) createConsulPartition(name string) error {
-	partition := &api.Partition{Name: name}
-	_, _, err := c.Consul().Partitions().Create(context.Background(), partition, nil)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *ClientSet) createConsulNs() error {
-	for _, tenancy := range tenancyHelper.TestTenancies() {
-		if tenancy.Namespace != "" && tenancy.Namespace != "default" {
-			ns := &api.Namespace{Name: tenancy.Namespace, Partition: tenancy.Partition}
-			_, _, err := c.Consul().Namespaces().Create(ns, nil)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
