@@ -10,10 +10,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	dep "github.com/hashicorp/consul-template/dependency"
+	dep "github.com/openbao/consul-template/dependency"
 )
 
 // NOTE: the template functions are all tested in ./template_test.go and

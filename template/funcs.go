@@ -28,6 +28,7 @@ import (
 	"dario.cat/mergo"
 	"github.com/BurntSushi/toml"
 	spewLib "github.com/davecgh/go-spew/spew"
+	dep "github.com/openbao/consul-template/dependency"
 	"github.com/hashicorp/consul/api"
 	socktmpl "github.com/hashicorp/go-sockaddr/template"
 	"github.com/pkg/errors"

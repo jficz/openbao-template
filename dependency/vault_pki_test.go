@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/consul-template/renderer"
+	"github.com/openbao/consul-template/renderer"
 	"github.com/openbao/openbao/api"
 )
 
