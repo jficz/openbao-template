@@ -1,108 +1,12 @@
-# 0.41.0 (June 5, 2025)
-
-IMPROVEMENTS:
-* feat: Pre-compute Sprig template functions during package init [GH-2052](https://github.com/hashicorp/consul-template/pull/2052)
-* update: go version to 1.24.3 [GH-2063](https://github.com/hashicorp/consul-template/pull/2063)
-* security: go-jose/v4 to v4.1.0 to fix CVE-2025-27144 [GH-2063](https://github.com/hashicorp/consul-template/pull/2063)
-* update: github.com/hashicorp/consul/api to v1.32.1 [GH-2063](https://github.com/hashicorp/consul-template/pull/2063)
-* update: github.com/hashicorp/vault/api to v1.16.0 [GH-2063](https://github.com/hashicorp/consul-template/pull/2063)
-
-BUG FIXES:
-* fix: timeout issues for list.peerings [GH-2042](https://github.com/hashicorp/consul-template/pull/2042)
-* fix: use 3.21 instead of latest for alpine in Dockerfile [GH-2064](https://github.com/hashicorp/consul-template/pull/2064)
-
-# 0.40.0 (February 14, 2025)
-
-IMPROVEMENTS:
-* Bump github.com/hashicorp/go-retryablehttp from v0.7.2 to v0.7.7 due to CVE [GH-1967](https://github.com/hashicorp/consul-template/pull/1967)
-* Bump golang.org/x/net to v0.34.0 from v0.24.0 [GH-2017](https://github.com/hashicorp/consul-template/pull/2017)
-* Bump golang.org/x/crypto to v0.32.0 from v0.22.0 [GH-2017](https://github.com/hashicorp/consul-template/pull/2017)
-* Bump golang.org/x/sys to v0.29.0 from v0.20.0 [GH-2017](https://github.com/hashicorp/consul-template/pull/2017)
-* Bump golang.org/x/text to v0.21.0 from v0.14.0 [GH-2017](https://github.com/hashicorp/consul-template/pull/2017)
-* Add support for the Vault KV subkeys API path [GH-2016](https://github.com/hashicorp/consul-template/pull/2016)
-
-REPO MAINTENANCE:
-* Update code owner file [GH-2006](https://github.com/hashicorp/consul-template/pull/2006)
-
-BUG FIXES:
-* Add quiescence run flag to avoid render loops among multiple templates [GH-2010](https://github.com/hashicorp/consul-template/pull/2010)
-
-# 0.39.1 (July 16, 2024)
-
-IMPROVEMENTS:
-* Enhance pkiCert template to return full CA chain [[GH-1962](https://github.com/hashicorp/consul-template/pull/1962)]
-
-# 0.39.0 (June 20, 2024)
+## v0.36.0-bao
 
 NEW FEATURES:
-* Add support for support for sameness groups [[GH-1899](https://github.com/hashicorp/consul-template/pull/1899)]
+* Read `BAO_`-prefixed variables over `VAULT_`-prefixed variables,
+  switching to OpenBao's API client.
 
-# 0.38.1 (June 6, 2024)
-
-IMPROVEMENTS:
-* Return expanded list for exportedServices instead of wildcard from configuration entry [[GH-1948](https://github.com/hashicorp/consul-template/pull/1948)]
-
-BUG FIXES:
-* Return the correct value for exportedServices when called multiple times with different partitions [[GH-1949](https://github.com/hashicorp/consul-template/pull/1949)]
-
-# 0.38.0 (June 3, 2024)
-
-NEW FEATURES:
-* Add support for listing Consul partitions [[GH-1940](https://github.com/hashicorp/consul-template/pull/1940)]
-* Add support for listing exported services in a Consul partition [[GH-1940](https://github.com/hashicorp/consul-template/pull/1940)]
-* Add support for grouping Consul services by port [[GH-1939](https://github.com/hashicorp/consul-template/pull/1939)]
-
-# 0.37.6 (May 6, 2024)
-BUG FIXES:
-* Fix shimkv2 concatenation [GH-1921]https://github.com/hashicorp/consul-template/pull/1921/
-
-# 0.37.5 (April 30, 2024)
-IMPROVEMENTS:
-* Formatting changes [GH-1901]https://github.com/hashicorp/consul-template/pull/1901
-* Use lifespan instead of duration when calculating TTL for PKI certificate renewal [GH-1865]https://github.com/hashicorp/consul-template/pull/1865
-* PKI Certificate renewal time can be configured using the VaultLeaseRenewal threshold value [GH-1908]https://github.com/hashicorp/consul-template/pull/1908
-
-BUG FIXES:
-* Fix linters [GH-1902]https://github.com/hashicorp/consul-template/pull/1902
-
-
-# 0.37.4 (March 27, 2024)
-IMPROVEMENTS:
-* Add a `ServerErrCh` to the runner that that will surface server errors back to the caller. [GH-1897](https://github.com/hashicorp/consul-template/pull/1897)
-
-BUG FIXES:
-* Fixed a goroutine leak where dependencies could be added after a runner stops. [GH-1898](https://github.com/hashicorp/consul-template/pull/1898)
-
-# 0.37.3 (Unreleased)
-Version 0.37.3 includes all the changes in 0.37.4 but was not officially released.
-
-# 0.37.2 (March 8, 2024)
-IMPROVEMENTS:
-* Add ability to set custom render and reader functions to control behaviour writing and reading files. [GH-1876](https://github.com/hashicorp/consul-template/pull/1876)
-
-# 0.37.1 (February 26, 2024)
-BUG FIXES:
-* Fix `peer` not being a part of `String` function in `health_service.go`.
-* Fix flaky ENT test cases [NET-7377](https://hashicorp.atlassian.net/browse/NET-7377).
-
-# 0.37.0 (February 20, 2024)
-
-NEW FEATURES:
-* Add support for listing Consul peers [NET-6966](https://hashicorp.atlassian.net/browse/NET-6966)
-* Add ENT test cases such that all unit tests could run on different combinations of namespace and partition [NET-7377](https://hashicorp.atlassian.net/browse/NET-7377)
-
-BUG FIXES:
-* Fetch services query not overriding opts correctly [NET-7571](https://hashicorp.atlassian.net/browse/NET-7571)
-* All consul resources which support namespace and partition should also have namespace and partition in the key represented by `String` function.[NET-7571](https://hashicorp.atlassian.net/browse/NET-7571)
-* Consul-template now correctly renders KVv2 secrets with `delete_version_after` set [NET-3777](https://hashicorp.atlassian.net/browse/NET-3777)
-
-## v0.36.0 (January 3, 2024)
-
-IMPROVEMENTS:
-* Support for namespaces, partitions in consul endpoints. [GH-1842](https://github.com/hashicorp/consul-template/pull/1842)
-* Bump github.com/go-jose/go-jose/v3 from 3.0.0 to 3.0.1. [GH-1843](https://github.com/hashicorp/consul-template/pull/1843)
-* Bump golang.org/x/crypto from 0.14.0 to 0.17.0. [GH-1858](https://github.com/hashicorp/consul-template/pull/1858)
-* Add Vault transport configuration option for `MaxConnsPerHost`. [GH-1858](https://github.com/hashicorp/consul-template/pull/1858)
+REMOVALS:
+* Consul & Nomad templating functionality. This fork will be for
+  OpenBao only.
 
 ## v0.35.0 (November 7, 2023)
 

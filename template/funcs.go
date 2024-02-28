@@ -35,7 +35,8 @@ import (
 	"golang.org/x/text/language"
 	yaml "gopkg.in/yaml.v2"
 
-	dep "github.com/openbao/consul-template/dependency"
+	dep "github.com/openbao/openbao-template/dependency"
+	"github.com/openbao/openbao/api"
 )
 
 // now is function that represents the current time in UTC. This is here
@@ -54,7 +55,7 @@ func envFunc(env []string) func(string) (string, error) {
 				return v, nil
 			}
 		}
-		return os.Getenv(s), nil
+		return api.ReadBaoVariable(s), nil
 	}
 }
 
@@ -97,7 +98,7 @@ func envWithDefaultFunc(env []string) func(string, string) (string, error) {
 				return v, nil
 			}
 		}
-		val, isPresent := os.LookupEnv(s)
+		val, isPresent := api.LookupBaoVariable(s)
 		if isPresent {
 			return val, nil
 		}

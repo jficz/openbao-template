@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/openbao/consul-template/test"
+	"github.com/openbao/openbao-template/test"
 	vapi "github.com/openbao/openbao/api"
 )
 
