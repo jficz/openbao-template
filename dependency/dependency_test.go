@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/openbao/openbao-template/test"
-	vapi "github.com/openbao/openbao/api"
+	vapi "github.com/openbao/openbao/api/v2"
 )
 
 const (

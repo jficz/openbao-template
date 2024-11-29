@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/openbao/openbao-template/renderer"
-	"github.com/openbao/openbao/api"
+	"github.com/openbao/openbao/api/v2"
 )
 
 func init() {
