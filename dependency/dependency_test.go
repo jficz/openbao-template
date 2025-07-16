@@ -40,16 +40,6 @@ func TestMain(m *testing.M) {
 	}
 	testClients = clients
 
-	if err := testClients.createConsulPartitions(); err != nil {
-		stopTestClients()
-		Fatalf("failed to create consul partitions: %v\n", err)
-	}
-
-	if err := testClients.createConsulNs(); err != nil {
-		stopTestClients()
-		Fatalf("failed to create consul namespaces: %v\n", err)
-	}
-
 	setupVaultPKI(clients)
 
 	exitCh := make(chan int, 1)
