@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/openbao/openbao-template/config"
 	"github.com/openbao/openbao-template/logging"
 	"github.com/openbao/openbao-template/manager"

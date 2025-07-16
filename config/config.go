@@ -20,6 +20,7 @@ import (
 	"github.com/openbao/openbao/api/v2"
 	"github.com/pkg/errors"
 
+	"github.com/openbao/openbao-template/renderer"
 	"github.com/openbao/openbao-template/signals"
 )
 

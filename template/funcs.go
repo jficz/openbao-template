@@ -29,7 +29,6 @@ import (
 	"github.com/BurntSushi/toml"
 	spewLib "github.com/davecgh/go-spew/spew"
 	socktmpl "github.com/hashicorp/go-sockaddr/template"
-	"github.com/imdario/mergo"
 	"github.com/pkg/errors"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"

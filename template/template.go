@@ -15,6 +15,7 @@ import (
 	"github.com/openbao/openbao-template/config"
 	dep "github.com/openbao/openbao-template/dependency"
 	"github.com/pkg/errors"
+	"github.com/ryanuber/go-glob"
 	"golang.org/x/exp/maps"
 )
 
